@@ -117,7 +117,7 @@ table.standings{width:100%;border-collapse:collapse;}
 .team-cell{display:flex;align-items:center;gap:8px;padding-left:10px;}
 .pos{width:18px;font-size:14px;font-weight:800;color:var(--txt3);}
 .pos.q{color:var(--green);}.pos.q3{color:var(--gold);}
-.tbl-name{font-size:15px;font-weight:700;}
+.tbl-name{font-size:13px;font-weight:700;}
 .pts-cell{font-weight:900;color:var(--txt);font-size:16px;}
 .gc-matches{padding:10px 14px;border-top:1px solid var(--border);}
 .gc-mtitle{font-size:13px;color:var(--txt2);font-weight:800;letter-spacing:.5px;text-transform:uppercase;margin-bottom:8px;}
@@ -207,7 +207,7 @@ table.standings{width:100%;border-collapse:collapse;}
 .bm-row{display:flex;align-items:center;padding:8px 8px;gap:5px;min-height:36px;}
 .bm-row+.bm-row{border-top:1px solid var(--border);}
 .bm-win{background:rgba(0,230,118,.08);}
-.bm-name{flex:1;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--txt);}
+.bm-name{flex:1;font-size:12px;font-weight:700;color:var(--txt);line-height:1.3;word-break:break-all;}
 .bm-score{font-size:13px;font-weight:900;color:var(--txt);font-variant-numeric:tabular-nums;min-width:14px;text-align:right;}
 .bconn-arm{flex:1;position:relative;}
 .bconn-arm::before{content:'';position:absolute;top:25%;left:0;width:50%;height:50%;border-top:1px solid var(--border);border-right:1px solid var(--border);border-bottom:1px solid var(--border);box-sizing:border-box;}
@@ -850,6 +850,21 @@ function renderGroups() {
 }
 
 // ═══════════════════ トーナメント ═══════════════════
+function slotDisplay(label, effKey, isPred, confirmed) {
+  // 3位候補スロット（例: "3A/B/C/D/F"）- effKeyより先に判定
+  if(label && label.match(/^3[A-L]/)){
+    const r=third3Flags(label);
+    if(r) return {
+      nameHtml:`<span style="display:flex;flex-wrap:wrap;gap:2px;align-items:center">${r.flags.join('')}<span style="font-size:10px;color:var(--gold);font-weight:700;margin-left:2px">3位候補</span></span>`,
+      clickable:false, tag:'', hideLeadFlag:true
+    };
+  }
+  if(!effKey) return {nameHtml:`<span style="color:var(--txt3);font-size:11px">未定</span>`, clickable:false, tag:''};
+  const t=team(effKey);
+  const tag=isPred&&!confirmed?`<span class="pred-tag">予</span>`:'';
+  return {nameHtml:`${t.n}${tag}`, clickable:!confirmed, tag};
+}
+
 function bracketMatchCard(m, isFinal) {
   const eh=getEffTeam(m,'home'), ea=getEffTeam(m,'away');
   const ht=eh.key?team(eh.key):null, at=ea.key?team(ea.key):null;
@@ -860,19 +875,17 @@ function bracketMatchCard(m, isFinal) {
   const predW=realW||PRED.knockout[m.phase+'_'+m.matchNum]||null;
   const hWin=confirmed?m.hs>m.as:(predW&&predW===eh.key);
   const aWin=confirmed?m.as>m.hs:(predW&&predW===ea.key);
-  const hTag=eh.isPred&&!confirmed?`<span class="pred-tag">予</span>`:'';
-  const aTag=ea.isPred&&!confirmed?`<span class="pred-tag">予</span>`:'';
-  const hClick=!confirmed&&eh.key?`onclick="event.stopPropagation();setPredWinner('${m.phase}',${m.matchNum},'${eh.key}')"`
-    :(!confirmed?'':`onclick="event.stopPropagation();openTeamModal('${eh.key}')"`)
-  const aClick=!confirmed&&ea.key?`onclick="event.stopPropagation();setPredWinner('${m.phase}',${m.matchNum},'${ea.key}')"`
-    :(!confirmed?'':`onclick="event.stopPropagation();openTeamModal('${ea.key}')"`)
+  const hSlot=slotDisplay(m.homeLabel,eh.key,eh.isPred,confirmed);
+  const aSlot=slotDisplay(m.awayLabel,ea.key,ea.isPred,confirmed);
+  const hClick=!confirmed&&eh.key?`onclick="event.stopPropagation();setPredWinner('${m.phase}',${m.matchNum},'${eh.key}')"`:'';
+  const aClick=!confirmed&&ea.key?`onclick="event.stopPropagation();setPredWinner('${m.phase}',${m.matchNum},'${ea.key}')"`:'';
   const canPick=!confirmed&&eh.key&&ea.key;
   return `<div class="bm${isFinal?' bm-final':''}" onclick="openMatchModal(${m.id})">
-    <div class="bm-row${hWin?(confirmed?' bm-win':' bm-pred-win'):''}${canPick?' tappable':''}" ${hClick}>
-      ${hFi}<span class="bm-name">${hName}${hTag}</span><span class="bm-score">${confirmed?m.hs:(hWin?'✓':'')}</span>
+    <div class="bm-row${hWin?(confirmed?' bm-win':' bm-pred-win'):''}${hSlot.clickable?' tappable':''}" ${hClick}>
+      ${hSlot.hideLeadFlag?'':hFi}<span class="bm-name">${hSlot.nameHtml}</span><span class="bm-score">${confirmed?m.hs:(hWin?'✓':'')}</span>
     </div>
-    <div class="bm-row${aWin?(confirmed?' bm-win':' bm-pred-win'):''}${canPick?' tappable':''}" ${aClick}>
-      ${aFi}<span class="bm-name">${aName}${aTag}</span><span class="bm-score">${confirmed?m.as:(aWin?'✓':'')}</span>
+    <div class="bm-row${aWin?(confirmed?' bm-win':' bm-pred-win'):''}${aSlot.clickable?' tappable':''}" ${aClick}>
+      ${aSlot.hideLeadFlag?'':aFi}<span class="bm-name">${aSlot.nameHtml}</span><span class="bm-score">${confirmed?m.as:(aWin?'✓':'')}</span>
     </div>
     ${canPick?`<div class="pred-hint">タップで勝者を予想</div>`:''}
   </div>`;
@@ -946,7 +959,7 @@ function renderTournament() {
     thirdHtml += `<div class="empty"><span class="empty-icon">🏆</span><p>試合データ未確定</p></div>`;
   }
 
-  const predBanner = `<div class="pred-banner" style="margin-bottom:12px">🔮 あなたの優勝予想 — チーム名をタップして勝者を選ぼう &nbsp;<span style="color:var(--txt3);font-weight:500;font-size:12px">予 = グループ予想から反映</span></div>`;
+  const predBanner = `<div class="pred-banner" style="margin-bottom:12px">🔮 チーム名をタップして勝者を選ぶと優勝予想ができる！ &nbsp;<span style="color:var(--txt3);font-weight:500;font-size:12px">予 = グループ予想から反映</span></div>`;
   el.innerHTML = predBanner + `<div class="bracket-wrap">${labelsHtml}${bHtml}</div>${thirdHtml}`;
 }
 
@@ -1253,6 +1266,18 @@ function getEffTeam(m,side){
   if(key&&key!=='TBD')return{key,isPred:false};
   if(label){const r=resolvePredLabel(label);if(r)return{key:r,isPred:true};}
   return{key:null,isPred:false};
+}
+
+// "3A/B/C/D/F" → 各グループの予想3位チームの国旗HTML
+function third3Flags(label){
+  const m=label&&label.match(/^3([A-L](?:\/[A-L])*)/);
+  if(!m)return null;
+  const groups=m[1].split('/');
+  const flags=groups.map(g=>{
+    const tk=(PRED.groups[g]||GROUPS[g]||[])[2];
+    return tk?fi(team(tk).code,'fi-s'):'';
+  }).filter(Boolean);
+  return flags.length?{flags,groups}:null;
 }
 
 function setPredWinner(phase,num,winnerKey){
