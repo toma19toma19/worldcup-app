@@ -198,20 +198,20 @@ table.standings{width:100%;border-collapse:collapse;}
 .bracket-wrap::-webkit-scrollbar{height:4px;}
 .bracket-wrap::-webkit-scrollbar-track{background:transparent;}
 .bracket-wrap::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px;}
-.bm{background:var(--bg2);border:1px solid var(--border);border-radius:9px;overflow:hidden;cursor:pointer;transition:border-color .15s;width:100%;}
-.bm:hover{border-color:rgba(0,230,118,.3);}
+.bm{background:var(--bg2);border:1px solid #2a3f60;border-radius:9px;overflow:hidden;cursor:pointer;transition:border-color .15s;width:100%;}
+.bm:hover{border-color:rgba(0,230,118,.5);}
 .bm:active{opacity:.8;}
-.bm-final{border-color:rgba(245,158,11,.4) !important;background:linear-gradient(135deg,rgba(245,158,11,.08),var(--bg2));}
+.bm-final{border-color:rgba(245,158,11,.6) !important;background:linear-gradient(135deg,rgba(245,158,11,.08),var(--bg2));}
 .bm-final:hover{border-color:var(--gold) !important;}
 .bm-empty{opacity:.25;pointer-events:none;}
-.bm-row{display:flex;align-items:center;padding:8px 8px;gap:5px;min-height:36px;}
+.bm-row{display:flex;align-items:center;padding:5px 7px;gap:5px;min-height:28px;}
 .bm-row+.bm-row{border-top:1px solid var(--border);}
 .bm-win{background:rgba(0,230,118,.08);}
 .bm-name{flex:1;font-size:12px;font-weight:700;color:var(--txt);line-height:1.3;word-break:break-all;}
 .bm-score{font-size:13px;font-weight:900;color:var(--txt);font-variant-numeric:tabular-nums;min-width:14px;text-align:right;}
 .bconn-arm{flex:1;position:relative;}
-.bconn-arm::before{content:'';position:absolute;top:25%;left:0;width:50%;height:50%;border-top:2px solid var(--txt3);border-right:2px solid var(--txt3);border-bottom:2px solid var(--txt3);box-sizing:border-box;}
-.bconn-arm::after{content:'';position:absolute;top:calc(50% - 1px);left:50%;width:50%;height:2px;background:var(--txt3);}
+.bconn-arm::before{content:'';position:absolute;top:25%;left:0;width:50%;height:50%;border-top:2px solid #3a5580;border-right:2px solid #3a5580;border-bottom:2px solid #3a5580;box-sizing:border-box;}
+.bconn-arm::after{content:'';position:absolute;top:calc(50% - 1px);left:50%;width:50%;height:2px;background:#3a5580;}
 
 /* ── COUNTDOWN TIMER ── */
 .mc-countdown{display:flex;align-items:center;justify-content:center;gap:6px;padding:7px 14px 9px;border-top:1px solid var(--border);background:rgba(0,230,118,.04);}
@@ -698,8 +698,10 @@ function buildDateScroll() {
   const el = document.getElementById('dateScroll');
   el.innerHTML = allDates.map(d => {
     const f = fmtDate(d);
+    const hasJapan = allMatches.some(m=>(m.jstDate||m.date)===d&&(m.home==='Japan'||m.away==='Japan'));
     return `<div class="date-chip${d===selDate?' active':''}" onclick="pickDate('${d}')">
       <span class="dc-dow">${f.dow}</span><span class="dc-day">${f.d}</span><span class="dc-mon">${f.m}月</span>
+      ${hasJapan?`<span style="font-size:10px;line-height:1">${fi('jp','fi-s')}</span>`:''}
     </div>`;
   }).join('');
   const idx = allDates.indexOf(selDate);
@@ -850,13 +852,35 @@ function renderGroups() {
 }
 
 // ═══════════════════ トーナメント ═══════════════════
+// 次ラウンドの試合依存関係からブラケット表示順を構築
+function buildBracketOrder(phase, nextPhaseMatches) {
+  const matches = koMatches.filter(m=>m.phase===phase);
+  if (!nextPhaseMatches || !nextPhaseMatches.length)
+    return matches.sort((a,b)=>a.matchNum-b.matchNum);
+  const result = [], used = new Set();
+  nextPhaseMatches.forEach(nm => {
+    [nm.homeLabel, nm.awayLabel].forEach(label => {
+      const wm = label && label.match(/^W(\d+)$/);
+      if (wm) {
+        const feeder = matchByApiNum[parseInt(wm[1])];
+        if (feeder && feeder.phase===phase && !used.has(feeder.apiNum)) {
+          result.push(feeder); used.add(feeder.apiNum);
+        }
+      }
+    });
+  });
+  matches.forEach(m=>{ if(!used.has(m.apiNum)) result.push(m); });
+  return result;
+}
 function slotDisplay(label, effKey, isPred, confirmed) {
-  // 3位候補スロット（例: "3A/B/C/D/F"）- effKeyより先に判定
-  if(label && label.match(/^3[A-L]/)){
-    const r=third3Flags(label);
+  // センチネル（3位候補）検出 - 次ラウンドへの伝播でも複数フラグ維持
+  const sentinel = effKey && effKey.startsWith('__3RD__') ? effKey.slice(7) : null;
+  const thirdLabel = sentinel || (label && label.match(/^3[A-L]/) ? label : null);
+  if(thirdLabel){
+    const r=third3Flags(thirdLabel);
     if(r) return {
       nameHtml:`<span style="display:flex;flex-wrap:wrap;gap:2px;align-items:center">${r.flags.join('')}<span style="font-size:10px;color:var(--gold);font-weight:700;margin-left:2px">3位候補</span></span>`,
-      clickable:false, tag:'', hideLeadFlag:true
+      clickable:true, tag:'', hideLeadFlag:true
     };
   }
   if(!effKey) return {nameHtml:`<span style="color:var(--txt3);font-size:11px">未定</span>`, clickable:false, tag:''};
@@ -882,18 +906,17 @@ function bracketMatchCard(m, isFinal) {
   const canPick=!confirmed&&eh.key&&ea.key;
   return `<div class="bm${isFinal?' bm-final':''}" onclick="openMatchModal(${m.id})">
     <div class="bm-row${hWin?(confirmed?' bm-win':' bm-pred-win'):''}${hSlot.clickable?' tappable':''}" ${hClick}>
-      ${hSlot.hideLeadFlag?'':hFi}<span class="bm-name">${hSlot.nameHtml}</span><span class="bm-score">${confirmed?m.hs:(hWin?'✓':'')}</span>
+      ${hSlot.hideLeadFlag?'':hFi}<span class="bm-name">${hSlot.nameHtml}</span><span class="bm-score">${confirmed?m.hs:(hWin?(isFinal?'🏆':'✓'):'')}</span>
     </div>
     <div class="bm-row${aWin?(confirmed?' bm-win':' bm-pred-win'):''}${aSlot.clickable?' tappable':''}" ${aClick}>
-      ${aSlot.hideLeadFlag?'':aFi}<span class="bm-name">${aSlot.nameHtml}</span><span class="bm-score">${confirmed?m.as:(aWin?'✓':'')}</span>
+      ${aSlot.hideLeadFlag?'':aFi}<span class="bm-name">${aSlot.nameHtml}</span><span class="bm-score">${confirmed?m.as:(aWin?(isFinal?'🏆':'✓'):'')}</span>
     </div>
-    ${canPick?`<div class="pred-hint">タップで勝者を予想</div>`:''}
   </div>`;
 }
 
 function renderTournament() {
   const el = document.getElementById('tournamentContent');
-  const ROUND_W = 168, CONN_W = 28, BH = 1100;
+  const ROUND_W = 168, CONN_W = 28, BH = 1400;
   const ROUND_DEFS = [
     {key:'r32',  label:'R32',     count:16},
     {key:'r16',  label:'R16',     count:8},
@@ -911,13 +934,21 @@ function renderTournament() {
   });
   labelsHtml += '</div>';
 
+  // 各ラウンドの正しい表示順を構築（実際の対戦依存に基づく）
+  const _sf  = koMatches.filter(m=>m.phase==='sf').sort((a,b)=>a.matchNum-b.matchNum);
+  const _qf  = buildBracketOrder('qf',  _sf);
+  const _r16 = buildBracketOrder('r16', _qf);
+  const _r32 = buildBracketOrder('r32', _r16);
+  const _fin = koMatches.filter(m=>m.phase==='final');
+  const bracketOrders = {r32:_r32, r16:_r16, qf:_qf, sf:_sf, final:_fin};
+
   // ブラケット本体
   let bHtml = `<div style="display:flex;height:${BH}px">`;
   ROUND_DEFS.forEach((rd, ri) => {
-    const ms = koMatches.filter(m=>m.phase===rd.key).sort((a,b)=>a.matchNum-b.matchNum);
+    const ms = bracketOrders[rd.key] || koMatches.filter(m=>m.phase===rd.key).sort((a,b)=>a.matchNum-b.matchNum);
     bHtml += `<div style="width:${ROUND_W}px;height:100%;display:flex;flex-direction:column;flex-shrink:0">`;
     for (let i = 0; i < rd.count; i++) {
-      bHtml += `<div style="flex:1;display:flex;align-items:center;padding:2px 0">
+      bHtml += `<div style="flex:1;display:flex;align-items:center;padding:3px 0">
         ${ms[i] ? bracketMatchCard(ms[i], rd.key==='final') : emptySlot}
       </div>`;
     }
@@ -1025,11 +1056,33 @@ function renderPredictGroups() {
   }).join('');
 }
 
+function clearGroupAffectedPreds(g) {
+  // グループGに関係するR32の予想のみ削除
+  let anyCleared = false;
+  const re = new RegExp(`^[1-4]${g}(/|$)`);
+  koMatches.forEach(m => {
+    if (m.phase !== 'r32') return;
+    if (re.test(m.homeLabel||'') || re.test(m.awayLabel||'')) {
+      const k = `r32_${m.matchNum}`;
+      if (PRED.knockout[k] !== undefined) {
+        delete PRED.knockout[k];
+        anyCleared = true;
+      }
+    }
+  });
+  // R32が変わった場合のみ下流(R16以降)も削除
+  if (anyCleared) {
+    ['r16','qf','sf','final'].forEach(phase =>
+      Object.keys(PRED.knockout).filter(k=>k.startsWith(phase+'_')).forEach(k=>delete PRED.knockout[k])
+    );
+  }
+}
+
 function moveTeamPred(g,idx,dir){
   const arr=PRED.groups[g];if(!arr)return;
   const ni=idx+dir;if(ni<0||ni>=arr.length)return;
   [arr[idx],arr[ni]]=[arr[ni],arr[idx]];
-  Object.keys(PRED.knockout).forEach(k=>delete PRED.knockout[k]);
+  clearGroupAffectedPreds(g);
   savePred();
   renderPredictGroups();
 }
@@ -1230,8 +1283,10 @@ function moveTeam(g,idx,dir){ moveTeamPred(g,idx,dir); }
 
 function resolvePredLabel(label){
   if(!label)return null;
-  // "1A" = グループAの1位, "2B" = グループBの2位, "3A/B/C/D/F" = 3位候補（先頭グループを使用）
-  const posM=label.match(/^([1-4])([A-L])/);
+  // "3A/B/C/D/F" → 複数グループ候補はセンチネルとして保持
+  if(label.match(/^3[A-L]\//) ) return '__3RD__'+label;
+  // "1A","2B","3A" format
+  const posM=label.match(/^([1-4])([A-L])$/);
   if(posM){
     const pos=parseInt(posM[1])-1;
     const g=posM[2];
@@ -1290,7 +1345,13 @@ function setPredWinner(phase,num,winnerKey){
     Object.keys(PRED.knockout).filter(k=>k.startsWith(phases[i]+'_')).forEach(k=>delete PRED.knockout[k]);
   }
   savePred();
+  const bw = document.querySelector('.bracket-wrap');
+  const sl = bw ? bw.scrollLeft : 0;
+  const st = window.scrollY;
   renderTournament();
+  const bw2 = document.querySelector('.bracket-wrap');
+  if(bw2) bw2.scrollLeft = sl;
+  window.scrollTo(0, st);
 }
 
 // ═══════════════════ タブ切替 ═══════════════════
