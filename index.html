@@ -1293,17 +1293,24 @@ function renderPredictGroups() {
   el.innerHTML = keys.map(g => {
     const ts = GROUPS[g]||[];
     const pTs = PRED.groups[g]||ts;
-    const hasResults = groupMatches.filter(m=>m.group===g).some(m=>m.hs!==null);
+    const gMs = groupMatches.filter(m=>m.group===g);
+    const hasResults = gMs.some(m=>m.hs!==null);
+    // 全試合終了した場合のみロック
+    const allFinished = gMs.length > 0 && gMs.every(m=>m.liveStatus==='FINISHED');
     return `<div class="gc">
       <div class="gc-head">
         <span class="gc-name">グループ ${g}</span>
         <span class="gc-flags">${ts.map(tk=>fi(team(tk).code,'fi-s')).join('')}</span>
       </div>
       <div style="padding:10px 14px 10px">
-        ${hasResults?`<div style="font-size:12px;color:var(--txt2);padding:4px 0 8px">⚠️ 試合開始済み — 確定結果を優先します</div>`:''}
+        ${allFinished
+          ? `<div style="font-size:12px;color:var(--gold);padding:4px 0 8px">🏁 グループ確定済み</div>`
+          : hasResults
+          ? `<div style="font-size:12px;color:var(--txt2);padding:4px 0 8px">⚽ 試合進行中 — 全試合終了まで予想変更できます</div>`
+          : ''}
         ${pTs.map((tk,i)=>{
           const t=team(tk);
-          const locked=hasResults;
+          const locked=allFinished;
           return `<div class="pred-team-item">
             <div class="pred-rank-b pr${i+1}">${i+1}</div>
             ${fi(t.code,'fi-s')}
@@ -1311,7 +1318,7 @@ function renderPredictGroups() {
             ${!locked?`<div class="pred-arrows">
               <button class="pred-arr" onclick="event.stopPropagation();moveTeamPred('${g}',${i},-1)" ${i===0?'disabled':''}>▲</button>
               <button class="pred-arr" onclick="event.stopPropagation();moveTeamPred('${g}',${i},1)" ${i===pTs.length-1?'disabled':''}>▼</button>
-            </div>`:`<span style="font-size:12px;color:var(--txt3)">確定待ち</span>`}
+            </div>`:`<span style="font-size:12px;color:var(--gold)">🔒</span>`}
           </div>`;
         }).join('')}
         <div style="font-size:12px;color:var(--txt3);padding:4px 2px 2px">
