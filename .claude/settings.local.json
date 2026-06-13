@@ -4,7 +4,10 @@
       "Bash(gh auth *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(gh repo *)",
+      "Bash(git remote *)",
+      "WebFetch(domain:toma19toma19.github.io)"
     ]
   }
 }

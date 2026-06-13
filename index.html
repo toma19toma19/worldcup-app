@@ -37,6 +37,13 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .countdown{background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.25);border-radius:11px;padding:7px 11px;text-align:center;flex-shrink:0;}
 .countdown .days{font-size:22px;font-weight:900;color:var(--green);line-height:1;font-variant-numeric:tabular-nums;}
 .countdown .lbl{font-size:11px;color:var(--txt2);margin-top:2px;font-weight:600;letter-spacing:.3px;}
+/* ── REFRESH ── */
+.refresh-btn{background:none;border:1px solid rgba(0,230,118,.3);border-radius:9px;color:var(--green);padding:6px 10px;cursor:pointer;font-size:13px;font-weight:700;display:flex;align-items:center;gap:5px;flex-shrink:0;transition:background .15s;-webkit-tap-highlight-color:transparent;}
+.refresh-btn:hover{background:rgba(0,230,118,.1);}
+.refresh-btn:active{opacity:.7;}
+.refresh-btn.spinning .ri{display:inline-block;animation:spin 1s linear infinite;}
+.ri{display:inline-block;}
+.last-updated{font-size:11px;color:var(--txt3);text-align:center;padding:3px 14px 0;}
 
 /* ── TABS ── */
 .tab-nav{position:fixed;bottom:0;left:0;right:0;background:#07090f;border-top:1px solid var(--border);display:flex;height:var(--tab-h);z-index:200;padding:0 6px;gap:2px;}
@@ -267,6 +274,13 @@ table.standings{width:100%;border-collapse:collapse;}
       <div class="days" id="cntDays">-</div>
       <div class="lbl" id="cntLbl">日後開幕</div>
     </div>
+    <button class="refresh-btn" id="refreshBtn" onclick="manualRefresh()" title="データを更新">
+      <span class="ri">🔄</span>
+    </button>
+  </div>
+  <div class="last-updated" id="lastUpdated"></div>
+  <div id="fdStatus" style="font-size:11px;color:var(--gold);text-align:center;padding:0 14px 3px;">
+    ⚡ ライブスコア有効 (ESPN Core API)
   </div>
 </header>
 
@@ -325,6 +339,57 @@ table.standings{width:100%;border-collapse:collapse;}
 // ═══════════════════ 定数・設定 ═══════════════════
 
 const API_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
+
+// ═══ football-data.org ライブスコア設定 ═══
+// 無料APIキーの取得: https://www.football-data.org/client/register
+// キーを設定するとリアルタイムスコア・LIVE状態が表示されます（設定なしでも動作）
+const FD_API_KEY = '';
+const FD_URL = 'https://api.football-data.org/v4/competitions/WC/matches';
+
+// football-data.org TLA → 内部チームキー
+const TLA_MAP = {
+  'MEX':'Mexico','ZAF':'SouthAfrica','KOR':'SouthKorea','CAN':'Canada',
+  'BRA':'Brazil','MAR':'Morocco','HTI':'Haiti','SCO':'Scotland',
+  'GER':'Germany','CUW':'Curacao','CIV':'IvoryCoast','ECU':'Ecuador',
+  'NED':'Netherlands','JPN':'Japan','TUN':'Tunisia','NZL':'NewZealand',
+  'BEL':'Belgium','EGY':'Egypt','IRN':'Iran','KSA':'SaudiArabia',
+  'SAU':'SaudiArabia','ESP':'Spain','CPV':'CapeVerde','URU':'Uruguay',
+  'USA':'USA','FRA':'France','SEN':'Senegal','NOR':'Norway',
+  'ARG':'Argentina','ALG':'Algeria','AUT':'Austria','JOR':'Jordan',
+  'POR':'Portugal','COL':'Colombia','UZB':'Uzbekistan',
+  'ENG':'England','CRO':'Croatia','GHA':'Ghana','PAN':'Panama',
+  'SRB':'Serbia','SUI':'Switzerland','CMR':'Cameroon',
+  'DEN':'Denmark','TUR':'Turkey','QAT':'Qatar',
+  'ROU':'Romania','SWE':'Sweden','IRQ':'Iraq',
+  'CZE':'CzechRepublic','BIH':'Bosnia','NGA':'Nigeria',
+  'AUS':'Australia','HON':'Honduras','CRC':'CostaRica',
+  'JAM':'Jamaica','PAR':'Paraguay','COD':'DRCongo',
+};
+
+// ═══ ESPN Core API 設定 ═══
+const ESPN_CORE_BASE = 'https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world';
+const ESPN_SITE_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world';
+const ESPN_WC_START  = '2026-06-11'; // 大会開始日
+
+// ESPN チーム略称 → 内部チームキー
+const ESPN_TLA = {
+  'MEX':'Mexico','RSA':'SouthAfrica','KOR':'SouthKorea','CAN':'Canada',
+  'BRA':'Brazil','MAR':'Morocco','HTI':'Haiti','SCO':'Scotland',
+  'GER':'Germany','CUW':'Curacao','CIV':'IvoryCoast','ECU':'Ecuador',
+  'NED':'Netherlands','JPN':'Japan','TUN':'Tunisia','NZL':'NewZealand',
+  'BEL':'Belgium','EGY':'Egypt','IRN':'Iran','KSA':'SaudiArabia',
+  'SAU':'SaudiArabia','ESP':'Spain','CPV':'CapeVerde','URU':'Uruguay',
+  'USA':'USA','FRA':'France','SEN':'Senegal','NOR':'Norway',
+  'ARG':'Argentina','ALG':'Algeria','AUT':'Austria','JOR':'Jordan',
+  'POR':'Portugal','COL':'Colombia','UZB':'Uzbekistan',
+  'ENG':'England','CRO':'Croatia','GHA':'Ghana','PAN':'Panama',
+  'SRB':'Serbia','SUI':'Switzerland','CMR':'Cameroon',
+  'DEN':'Denmark','TUR':'Turkey','QAT':'Qatar',
+  'ROU':'Romania','SWE':'Sweden','IRQ':'Iraq',
+  'CZE':'CzechRepublic','BIH':'Bosnia','NGA':'Nigeria',
+  'AUS':'Australia','HON':'Honduras','CRC':'CostaRica',
+  'JAM':'Jamaica','PAR':'Paraguay','COD':'DRCongo',
+};
 
 // code: flag-icons の ISO コード
 const T = {
@@ -408,6 +473,13 @@ const NAME_MAP = {
   'Panama':'Panama','Jamaica':'Jamaica','Honduras':'Honduras',
   'Costa Rica':'CostaRica','Haiti':'Haiti','Curaçao':'Curacao',
   'New Zealand':'NewZealand',
+  // UEFAプレーオフ・インターコンチネンタルプレーオフ出場チーム（確定済み）
+  'UEFA Path A winner':'Bosnia','UEFA Path B winner':'Sweden',
+  'UEFA Path C winner':'Turkey','UEFA Path D winner':'CzechRepublic',
+  'IC Path 1 winner':'DRCongo','IC Path 2 winner':'Iraq',
+  // ESPN表記の揺れ
+  'Czechia':'CzechRepublic','Bosnia-Herzegovina':'Bosnia',
+  'United States':'USA',
 };
 
 const V = {
@@ -622,9 +694,163 @@ function roundToPhase(round) {
 
 // ═══════════════════ データ取得・処理 ═══════════════════
 async function loadData() {
-  const resp = await fetch(API_URL);
+  const resp = await fetch(API_URL, {cache: 'no-cache'});
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   return await resp.json();
+}
+
+// football-data.org のチーム情報を内部キーに変換
+function resolveFdTeam(fdTeam) {
+  if (!fdTeam) return null;
+  if (fdTeam.tla && TLA_MAP[fdTeam.tla]) return TLA_MAP[fdTeam.tla];
+  const nm = fdTeam.shortName || fdTeam.name || '';
+  return resolveTeam(nm) || null;
+}
+
+// football-data.org からライブスコアを取得し allMatches に反映
+async function fetchAndMergeLiveScores() {
+  if (!FD_API_KEY) return false;
+  try {
+    const resp = await fetch(FD_URL, {
+      headers: {'X-Auth-Token': FD_API_KEY},
+      cache: 'no-cache',
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    let changed = false;
+    (data.matches || []).forEach(fm => {
+      const hk = resolveFdTeam(fm.homeTeam);
+      const ak = resolveFdTeam(fm.awayTeam);
+      if (!hk || !ak) return;
+      const m = allMatches.find(x => x.home === hk && x.away === ak);
+      if (!m) return;
+      const st = fm.status || 'SCHEDULED';
+      const isLive = st === 'IN_PLAY' || st === 'PAUSED';
+      // ライブ中はfullTime→halfTimeの順でスコアを取得
+      const rawHs = fm.score?.fullTime?.home ?? (isLive ? fm.score?.halfTime?.home ?? null : null);
+      const rawAs = fm.score?.fullTime?.away ?? (isLive ? fm.score?.halfTime?.away ?? null : null);
+      const newHs = (st === 'FINISHED' || isLive) ? rawHs : null;
+      const newAs = (st === 'FINISHED' || isLive) ? rawAs : null;
+      if (m.hs !== newHs || m.as !== newAs || m.liveStatus !== st) {
+        m.hs = newHs;
+        m.as = newAs;
+        m.liveStatus = st;
+        changed = true;
+      }
+    });
+    return changed;
+  } catch (e) {
+    return false;
+  }
+}
+
+// ESPN Core API からスコア・ステータスを取得し allMatches に反映
+async function fetchEspnCoreScores() {
+  try {
+    // 大会開始日から今日までの日付リストを生成
+    const today = new Date();
+    const start = new Date(ESPN_WC_START);
+    const dates = [];
+    for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+      const y = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      dates.push(`${y}${mm}${dd}`);
+    }
+
+    // 各日付のスコアボードからイベント情報を取得
+    const eventList = [];
+    await Promise.all(dates.map(async dateStr => {
+      try {
+        const r = await fetch(`${ESPN_SITE_BASE}/scoreboard?dates=${dateStr}`, {cache:'no-cache'});
+        if (!r.ok) return;
+        const data = await r.json();
+        (data.events||[]).forEach(ev => {
+          const comp = ev.competitions?.[0];
+          if (!comp) return;
+          const comps = comp.competitors||[];
+          if (comps.length < 2) return;
+          const home = comps.find(c => c.homeAway === 'home');
+          const away = comps.find(c => c.homeAway === 'away');
+          if (!home || !away) return;
+          eventList.push({
+            eventId: ev.id,
+            homeId:   home.id,
+            homeAbbr: home.team?.abbreviation,
+            awayId:   away.id,
+            awayAbbr: away.team?.abbreviation,
+          });
+        });
+      } catch(e) {}
+    }));
+
+    if (!eventList.length) return false;
+
+    // 各イベントのステータス＋スコアを ESPN Core API から並列取得
+    let changed = false;
+    await Promise.all(eventList.map(async ev => {
+      try {
+        const base = `${ESPN_CORE_BASE}/events/${ev.eventId}/competitions/${ev.eventId}`;
+        const [stR, hsR, asR] = await Promise.all([
+          fetch(`${base}/status`,                           {cache:'no-cache'}),
+          fetch(`${base}/competitors/${ev.homeId}/score`,   {cache:'no-cache'}),
+          fetch(`${base}/competitors/${ev.awayId}/score`,   {cache:'no-cache'}),
+        ]);
+        if (!stR.ok) return;
+        const stData = await stR.json();
+        const stName = stData.type?.name || '';
+        const state  = stData.type?.state || '';
+
+        // 未開始はスキップ
+        if (state === 'pre') return;
+
+        // ステータスを内部形式にマッピング
+        let liveStatus = 'SCHEDULED';
+        if (state === 'post' || stName.includes('FINAL') || stName.includes('FULL_TIME')) {
+          liveStatus = 'FINISHED';
+        } else if (state === 'in') {
+          liveStatus = stName === 'STATUS_HALFTIME' ? 'PAUSED' : 'IN_PLAY';
+        }
+        if (liveStatus === 'SCHEDULED') return;
+
+        // スコアを取得
+        let hs = null, as_ = null;
+        if (hsR.ok && asR.ok) {
+          const hsData = await hsR.json();
+          const asData = await asR.json();
+          if (hsData.value != null) hs  = Math.round(hsData.value);
+          if (asData.value != null) as_ = Math.round(asData.value);
+        }
+
+        // 内部チームキーに変換
+        const hk = ESPN_TLA[ev.homeAbbr];
+        const ak = ESPN_TLA[ev.awayAbbr];
+        if (!hk || !ak) return;
+
+        // allMatches に反映
+        const match = allMatches.find(x => x.home === hk && x.away === ak);
+        if (!match) return;
+
+        // ESPN event ID・チームIDを保存（得点者取得に使用）
+        match.espnEventId = ev.eventId;
+        match.espnHomeId  = ev.homeId;
+        match.espnAwayId  = ev.awayId;
+
+        const newHs = (hs  != null) ? hs  : null;
+        const newAs = (as_ != null) ? as_ : null;
+        if (match.hs !== newHs || match.as !== newAs || match.liveStatus !== liveStatus) {
+          match.hs = newHs;
+          match.as = newAs;
+          match.liveStatus = liveStatus;
+          changed = true;
+        }
+      } catch(e) {}
+    }));
+
+    return changed;
+  } catch(e) {
+    return false;
+  }
 }
 
 function processData(data) {
@@ -727,9 +953,10 @@ function kickoffTimestamp(m) {
 }
 
 function countdownHtml(m) {
-  if (m.hs !== null) return ''; // 終了試合はカウントダウン不要
+  if (m.hs !== null || m.liveStatus === 'IN_PLAY' || m.liveStatus === 'PAUSED') return ''; // 終了・LIVE中はカウントダウン不要
   const ts = kickoffTimestamp(m);
   if (!ts) return '';
+  if (ts <= Date.now()) return ''; // 開始時刻を過ぎたら表示しない（openfootballの更新待ち試合を誤LIVEにしない）
   return `<div class="mc-countdown" id="cd-${m.id}" data-ts="${ts}">
     <div class="cd-unit"><span class="cd-num" id="cd-d-${m.id}">--</span><span class="cd-lbl">日</span></div>
     <span class="cd-sep">:</span>
@@ -754,7 +981,11 @@ function matchCard(m) {
   const aClick = !isTBD?`onclick="event.stopPropagation();openTeamModal('${m.away}')"`:''
   const timeDisp = m.jst || m.time || '—';
 
-  const midHtml = m.hs!==null
+  const isMatchLive = m.liveStatus === 'IN_PLAY' || m.liveStatus === 'PAUSED';
+  const midHtml = isMatchLive
+    ? `<div class="mc-score"><span class="mc-snum">${m.hs??'-'}</span><span class="mc-sep">-</span><span class="mc-snum">${m.as??'-'}</span></div>
+       <span class="mc-status st-live">🔴 LIVE</span>`
+    : m.hs!==null
     ? `<div class="mc-score"><span class="mc-snum">${m.hs}</span><span class="mc-sep">-</span><span class="mc-snum">${m.as}</span></div>
        <span class="mc-status st-fin">終了</span>`
     : `<div class="mc-time">${timeDisp}</div>
@@ -808,20 +1039,51 @@ function buildGroupFilter() {
 
 function pickGroup(g){selGroup=g;buildGroupFilter();renderGroups();}
 
+// グループスタンディングを実際の試合結果から計算
+function computeGroupStandings(g) {
+  const teams = GROUPS[g] || [];
+  const stats = {};
+  teams.forEach(tk => {
+    stats[tk] = {team:tk, played:0, won:0, drawn:0, lost:0, gf:0, ga:0, gd:0, pts:0};
+  });
+  groupMatches.filter(m => m.group === g && m.hs !== null && m.liveStatus === 'FINISHED').forEach(m => {
+    const h = stats[m.home], a = stats[m.away];
+    if (!h || !a) return;
+    h.played++; a.played++;
+    h.gf += m.hs; h.ga += m.as;
+    a.gf += m.as; a.ga += m.hs;
+    h.gd = h.gf - h.ga; a.gd = a.gf - a.ga;
+    if (m.hs > m.as)      { h.won++; h.pts += 3; a.lost++; }
+    else if (m.hs < m.as) { a.won++; a.pts += 3; h.lost++; }
+    else                   { h.drawn++; h.pts++; a.drawn++; a.pts++; }
+  });
+  // 勝点 → 得失点差 → 総得点 → 直接対決（簡易） → チーム名
+  return Object.values(stats).sort((a,b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.gd  !== a.gd)  return b.gd  - a.gd;
+    if (b.gf  !== a.gf)  return b.gf  - a.gf;
+    return a.team.localeCompare(b.team);
+  });
+}
+
 function renderGroups() {
   const keys = selGroup==='all'?Object.keys(GROUPS).sort():[selGroup];
   document.getElementById('groupsContainer').innerHTML = keys.map(g => {
-    const ts = GROUPS[g]||[];
-    const ms = groupMatches.filter(m=>m.group===g).slice(0,3);
+    const standings = computeGroupStandings(g);
+    const ms = groupMatches.filter(m=>m.group===g);
 
     const bodyHtml = `<table class="standings">
         <thead><tr><th colspan="2">チーム</th><th>試</th><th>勝</th><th>分</th><th>負</th><th>得</th><th>失</th><th>差</th><th>点</th></tr></thead>
-        <tbody>${ts.map((tk,i) => {
-          const t = team(tk);
+        <tbody>${standings.map((s,i) => {
+          const t = team(s.team);
           const pc = i<2?'q':i===2?'q3':'';
-          return `<tr onclick="openTeamModal('${tk}')">
+          return `<tr onclick="openTeamModal('${s.team}')">
             <td><div class="team-cell"><span class="pos ${pc}">${i+1}</span>${fi(t.code,'fi-s')}<span class="tbl-name">${t.n}</span></div></td>
-            <td></td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td class="pts-cell">0</td>
+            <td></td>
+            <td>${s.played}</td><td>${s.won}</td><td>${s.drawn}</td><td>${s.lost}</td>
+            <td>${s.gf}</td><td>${s.ga}</td>
+            <td>${s.gd>0?'+'+s.gd:s.gd}</td>
+            <td class="pts-cell">${s.pts}</td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;
@@ -829,17 +1091,21 @@ function renderGroups() {
     return `<div class="gc">
       <div class="gc-head">
         <span class="gc-name">グループ ${g}</span>
-        <span class="gc-flags">${ts.map(tk=>fi(team(tk).code,'fi-s')).join('')}</span>
+        <span class="gc-flags">${standings.map(s=>fi(team(s.team).code,'fi-s')).join('')}</span>
       </div>
       ${bodyHtml}
       <div class="gc-matches">
-        <div class="gc-mtitle">試合一覧（抜粋）</div>
+        <div class="gc-mtitle">試合一覧</div>
         ${ms.map(m => {
           const h=team(m.home),a=team(m.away);
           const jf = fmtDate(m.jstDate||m.date);
-          const mid = m.hs!==null
+          const isLive = m.liveStatus==='IN_PLAY'||m.liveStatus==='PAUSED';
+          const isFin  = m.liveStatus==='FINISHED';
+          const mid = isLive
+            ? `<div class="gm-score" style="color:var(--red)">${m.hs} - ${m.as}<br><span style="font-size:9px">🔴LIVE</span></div>`
+            : isFin
             ? `<div class="gm-score">${m.hs} - ${m.as}</div>`
-            : `<div class="gm-date">${jf.full}</div>`;
+            : `<div class="gm-date">${jf.full}<br><span style="font-size:10px;color:var(--txt3)">${m.jst||m.time||''}</span></div>`;
           return `<div class="gc-match-row" onclick="openMatchModal(${m.id})">
             <div class="gm-teams">${fi(h.code,'fi-s')} ${h.n}</div>
             ${mid}
@@ -1087,6 +1353,125 @@ function moveTeamPred(g,idx,dir){
   renderPredictGroups();
 }
 
+// ═══════════════════ 得点者取得 ═══════════════════
+// プレイデータからゴール情報を解析
+function parseGoalFromPlay(play, espnHomeId) {
+  const typeText = (play.type?.text || play.type?.abbreviation || play.text || '').toLowerCase();
+  if (!typeText.includes('goal') && !typeText.includes('scored')) return null;
+  const athletes = play.participants || play.athletesInvolved || [];
+  const name = athletes
+    .map(a => a.athlete?.displayName || a.displayName || a.fullName || '')
+    .filter(Boolean).join(', ');
+  if (!name) return null;
+  const clock = play.clock?.displayValue || play.wallclock || '';
+  const teamId = String(play.team?.id || play.team?.$ref?.match(/\/teams\/(\d+)/)?.[1] || '');
+  const isHome = espnHomeId ? (teamId === String(espnHomeId)) : null;
+  const own = typeText.includes('own');
+  return { name, clock, isHome, own };
+}
+
+async function fetchAndShowScorers(eventId, homeKey, awayKey, espnHomeId, espnAwayId) {
+  const el = document.getElementById('m-scorers');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;color:var(--txt3);font-size:12px;padding:8px">⏳ 得点者を読み込み中…</div>';
+
+  let goals = [];
+
+  // ① ESPN Core API plays エンドポイント
+  try {
+    const coreUrl = `${ESPN_CORE_BASE}/events/${eventId}/competitions/${eventId}/plays?limit=200`;
+    const res = await fetch(coreUrl);
+    if (res.ok) {
+      const data = await res.json();
+      let plays = data.items || [];
+
+      // インラインデータがない場合は $ref を並列フェッチ（最大100件）
+      if (plays.length > 0 && !plays.some(p => p.type)) {
+        const refPlays = plays.filter(p => p.$ref).slice(0, 100);
+        plays = (await Promise.all(
+          refPlays.map(p => fetch(p.$ref).then(r => r.ok ? r.json() : null).catch(() => null))
+        )).filter(Boolean);
+      }
+
+      for (const play of plays) {
+        const g = parseGoalFromPlay(play, espnHomeId);
+        if (g) goals.push(g);
+      }
+    }
+  } catch(_) {}
+
+  // ② ESPN Site API summary（フォールバック）
+  if (goals.length === 0) {
+    try {
+      const siteUrl = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=${eventId}`;
+      const res = await fetch(siteUrl);
+      if (res.ok) {
+        const data = await res.json();
+        const comps = data?.header?.competitions;
+        const comp = Array.isArray(comps) ? comps[0] : null;
+        const details = comp?.details || data?.scoringPlays || [];
+        const homeCompId = String(comp?.competitors?.find(c=>c.homeAway==='home'||c.order===0)?.id || '');
+
+        for (const d of details) {
+          const typeText = (d.type?.text || '').toLowerCase();
+          if (!typeText.includes('goal')) continue;
+          const athletes = d.athletesInvolved || [];
+          const name = athletes.map(a=>a.displayName||'').filter(Boolean).join(', ');
+          if (!name) continue;
+          const clock = d.clock?.displayValue || '';
+          const teamId = String(d.team?.id || '');
+          const isHome = homeCompId ? teamId === homeCompId : null;
+          const own = typeText.includes('own');
+          goals.push({ name, clock, isHome, own });
+        }
+      }
+    } catch(_) {}
+  }
+
+  if (!document.getElementById('m-scorers')) return; // モーダルが閉じられていたら終了
+  const elNow = document.getElementById('m-scorers');
+  if (!elNow) return;
+
+  if (goals.length === 0) { elNow.innerHTML = ''; return; }
+
+  // ホーム・アウェイ分類（isHomeが不明な場合は1カラム表示）
+  const hasTeamInfo = goals.every(g => g.isHome !== null);
+  const homeGoals = goals.filter(g => g.isHome === true);
+  const awayGoals = goals.filter(g => g.isHome === false);
+
+  const hT = team(homeKey);
+  const aT = team(awayKey);
+  const hName = hT ? hT.n : homeKey;
+  const aName = aT ? aT.n : awayKey;
+
+  function goalItem(g) {
+    return `<div style="font-size:12px;color:var(--txt1);padding:2px 0">
+      ⚽ <span style="font-weight:700">${g.name}${g.own?' <span style="color:var(--red);font-size:11px">(OG)</span>':''}</span>${g.clock?` <span style="color:var(--txt3);font-size:11px">${g.clock}</span>`:''}
+    </div>`;
+  }
+
+  // チーム判定ができた場合は2カラム、できない場合は1カラム
+  const bodyHtml = hasTeamInfo
+    ? `<div style="display:flex;gap:8px">
+        <div style="flex:1">
+          <div style="font-size:10px;color:var(--txt3);font-weight:700;margin-bottom:4px">${hName}</div>
+          ${homeGoals.length ? homeGoals.map(goalItem).join('') : '<div style="font-size:11px;color:var(--txt3)">—</div>'}
+        </div>
+        <div style="width:1px;background:var(--border)"></div>
+        <div style="flex:1">
+          <div style="font-size:10px;color:var(--txt3);font-weight:700;margin-bottom:4px">${aName}</div>
+          ${awayGoals.length ? awayGoals.map(goalItem).join('') : '<div style="font-size:11px;color:var(--txt3)">—</div>'}
+        </div>
+      </div>`
+    : goals.map(goalItem).join('');
+
+  elNow.innerHTML = `
+    <div style="background:var(--card2);border-radius:10px;padding:12px 14px;margin-top:4px">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.8px;color:var(--txt3);margin-bottom:8px;text-align:center">⚽ ゴール</div>
+      ${bodyHtml}
+    </div>`;
+}
+
 // ═══════════════════ モーダル ═══════════════════
 function openMatchModal(id) {
   const m = allMatches.find(x=>x.id===id);
@@ -1102,7 +1487,11 @@ function openMatchModal(id) {
   const aFi = isTBD?'❓':fi(a.code,'fi-hero');
   const timeDisp = m.jst || m.time || '—';
 
-  const scoreHtml = m.hs!==null
+  const isModalLive = m.liveStatus === 'IN_PLAY' || m.liveStatus === 'PAUSED';
+  const scoreHtml = isModalLive
+    ? `<div class="m-score"><span>${m.hs??'-'}</span><span class="m-sep">-</span><span>${m.as??'-'}</span></div>
+       <div class="m-vs-lbl" style="color:var(--red);font-weight:800">🔴 LIVE</div>`
+    : m.hs!==null
     ? `<div class="m-score"><span>${m.hs}</span><span class="m-sep">-</span><span>${m.as}</span></div>`
     : `<div class="m-prestart">vs</div><div class="m-vs-lbl">試合前</div>`;
 
@@ -1130,8 +1519,13 @@ function openMatchModal(id) {
       <div class="info-item"><div class="info-lbl">🏙 都市</div><div class="info-val">${vd.code?fi(vd.code,'fi-s'):''} ${vd.city||m.venueCity||'—'}</div></div>
       <div class="info-item"><div class="info-lbl">👥 収容人数</div><div class="info-val">${vd.cap?vd.cap.toLocaleString()+'人':'—'}</div></div>
       <div class="info-item"><div class="info-lbl">⏰ キックオフ</div><div class="info-val">${timeDisp}</div></div>
-    </div>`;
+    </div>
+    <div id="m-scorers" style="margin-top:12px;min-height:0"></div>`;
   openOverlay();
+  // 得点者情報を非同期取得（スコアがある試合のみ）
+  if (m.hs !== null && m.espnEventId) {
+    fetchAndShowScorers(m.espnEventId, m.home, m.away, m.espnHomeId, m.espnAwayId);
+  }
 }
 
 function openTeamModal(tk) {
@@ -1235,7 +1629,7 @@ function tickCountdowns() {
     const diff = ts - now;
     const id = el.id.replace('cd-','');
     if (diff <= 0) {
-      el.innerHTML = '<span style="font-size:13px;font-weight:800;color:var(--red);">🔴 LIVE</span>';
+      el.style.display = 'none'; // 開始時刻超過 → カウントダウンを非表示（LIVEはFD.org由来のliveStatusで制御）
       return;
     }
     const totalSec = Math.floor(diff / 1000);
@@ -1290,6 +1684,11 @@ function resolvePredLabel(label){
   if(posM){
     const pos=parseInt(posM[1])-1;
     const g=posM[2];
+    // 実際の試合結果がある場合は現在のスタンディング順位を優先
+    const standings = computeGroupStandings(g);
+    if (standings.some(s => s.played > 0) && standings[pos]) {
+      return standings[pos].team;
+    }
     return(PRED.groups[g]||GROUPS[g]||[])[pos]||null;
   }
   // "W73" = 試合番号73の勝者
@@ -1365,6 +1764,102 @@ function switchTab(tab) {
   if(tab==='predict') renderPredict();
 }
 
+// ═══════════════════ 最終更新時刻 ═══════════════════
+function updateFdStatusLabel() {
+  // ESPN Core APIは常に有効（キー不要）なのでラベルを常時表示
+  const el = document.getElementById('fdStatus');
+  if (el) el.style.display = '';
+}
+
+function updateLastUpdatedLabel() {
+  const el = document.getElementById('lastUpdated');
+  if (!el) return;
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  el.textContent = `最終更新: ${h}:${m}:${s}`;
+}
+
+// ═══════════════════ 手動更新 ═══════════════════
+let _refreshing = false;
+async function manualRefresh() {
+  if (_refreshing) return;
+  await refreshData(true);
+}
+
+// ═══════════════════ データ更新共通処理 ═══════════════════
+async function refreshData(isManual = false) {
+  if (_refreshing) return;
+  _refreshing = true;
+  const btn = document.getElementById('refreshBtn');
+  if (btn) btn.classList.add('spinning');
+  try {
+    const data = await loadData();
+    const prevScores = {};
+    allMatches.forEach(m => { prevScores[m.id] = {hs:m.hs, as:m.as}; });
+
+    processData(data);
+    matchByApiNum = {};
+    koMatches.forEach(m=>{ if(m.apiNum) matchByApiNum[m.apiNum]=m; });
+    initGroupPreds();
+    await fetchEspnCoreScores();      // ESPN Core API でスコアを取得（無料・無制限）
+    await fetchAndMergeLiveScores(); // FD.org ライブスコアをオーバーレイ（APIキー設定時）
+
+    updateLastUpdatedLabel();
+
+    // 現在表示中のタブを再描画
+    const activeView = document.querySelector('.view.active');
+    if (activeView) {
+      const tab = activeView.id.replace('view-','');
+      if (tab==='schedule') { buildDateScroll(); renderSchedule(); }
+      else if (tab==='groups') { buildGroupFilter(); renderGroups(); }
+      else if (tab==='tournament') { renderTournament(); }
+      else if (tab==='predict') { renderPredict(); }
+    }
+
+    // スコアが変わった試合があればフラッシュ通知
+    if (isManual) {
+      let changed = 0;
+      allMatches.forEach(m => {
+        const prev = prevScores[m.id];
+        if (prev && (prev.hs !== m.hs || prev.as !== m.as)) changed++;
+      });
+      if (changed > 0) showToast(`⚽ ${changed}試合のスコアが更新されました`);
+      else showToast('✓ 最新データに更新済みです');
+    }
+  } catch(err) {
+    if (isManual) showToast('⚠️ 更新に失敗しました: ' + err.message);
+  } finally {
+    _refreshing = false;
+    if (btn) btn.classList.remove('spinning');
+  }
+}
+
+// ═══════════════════ トースト通知 ═══════════════════
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.style.cssText = 'position:fixed;bottom:calc(var(--tab-h)+20px);left:50%;transform:translateX(-50%);background:#1a2540;border:1px solid var(--green);color:var(--txt);padding:10px 18px;border-radius:11px;font-size:14px;font-weight:700;z-index:9999;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.4);transition:opacity .3s;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._to);
+  t._to = setTimeout(() => { t.style.opacity = '0'; }, 2500);
+}
+
+// ═══════════════════ 自動更新タイマー ═══════════════════
+const AUTO_REFRESH_MS = 60 * 1000; // 60秒
+let _autoRefreshTimer = null;
+
+function startAutoRefresh() {
+  if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
+  _autoRefreshTimer = setInterval(() => { refreshData(false); }, AUTO_REFRESH_MS);
+}
+
 // ═══════════════════ 初期化 ═══════════════════
 async function init() {
   try {
@@ -1375,15 +1870,30 @@ async function init() {
     loadPred();
     initGroupPreds();
     const allDates = [...new Set(allMatches.map(m=>m.jstDate||m.date))].sort();
-    selDate = allDates[0]||'2026-06-12';
+    // 今日のJST日付を基準に選択日を決定
+    const nowJST = new Date(Date.now() + 9*3600*1000);
+    const todayJST = nowJST.toISOString().slice(0,10);
+    selDate = allDates.includes(todayJST) ? todayJST          // 今日に試合あり
+            : allDates.filter(d => d <= todayJST).slice(-1)[0] // 今日以前で最近
+            || allDates[0]
+            || '2026-06-12';
     document.getElementById('scheduleLoading').style.display='none';
     document.getElementById('scheduleReady').style.display='block';
     buildDateScroll();
     renderSchedule();
     buildGroupFilter();
     renderGroups();
+    await fetchEspnCoreScores();      // ESPN Core API でスコアを取得（無料・無制限）
+    await fetchAndMergeLiveScores(); // FD.org ライブスコアをオーバーレイ（APIキー設定時）
+    // スコア取得後に再描画（初期表示に結果を反映）
+    buildDateScroll();
+    renderSchedule();
+    renderGroups();
     renderTournament();
     renderPredict();
+    updateLastUpdatedLabel();
+    updateFdStatusLabel();
+    startAutoRefresh();
   } catch(err) {
     document.getElementById('scheduleLoading').innerHTML=`
       <div class="error-box">
