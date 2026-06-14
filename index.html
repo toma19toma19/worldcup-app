@@ -374,11 +374,11 @@ const ESPN_WC_START  = '2026-06-11'; // 大会開始日
 // ESPN チーム略称 → 内部チームキー
 const ESPN_TLA = {
   'MEX':'Mexico','RSA':'SouthAfrica','KOR':'SouthKorea','CAN':'Canada',
-  'BRA':'Brazil','MAR':'Morocco','HTI':'Haiti','SCO':'Scotland',
+  'BRA':'Brazil','MAR':'Morocco','HTI':'Haiti','HAI':'Haiti','SCO':'Scotland',
   'GER':'Germany','CUW':'Curacao','CIV':'IvoryCoast','ECU':'Ecuador',
   'NED':'Netherlands','JPN':'Japan','TUN':'Tunisia','NZL':'NewZealand',
   'BEL':'Belgium','EGY':'Egypt','IRN':'Iran','KSA':'SaudiArabia',
-  'SAU':'SaudiArabia','ESP':'Spain','CPV':'CapeVerde','URU':'Uruguay',
+  'SAU':'SaudiArabia','ESP':'Spain','CPV':'CapeVerde','CVD':'CapeVerde','URU':'Uruguay',
   'USA':'USA','FRA':'France','SEN':'Senegal','NOR':'Norway',
   'ARG':'Argentina','ALG':'Algeria','AUT':'Austria','JOR':'Jordan',
   'POR':'Portugal','COL':'Colombia','UZB':'Uzbekistan',
@@ -827,17 +827,22 @@ async function fetchEspnCoreScores() {
         const ak = ESPN_TLA[ev.awayAbbr];
         if (!hk || !ak) return;
 
-        // allMatches に反映
-        const match = allMatches.find(x => x.home === hk && x.away === ak);
+        // allMatches に反映（ホーム/アウェイの順序が逆のケースも試みる）
+        let match = allMatches.find(x => x.home === hk && x.away === ak);
+        let swapped = false;
+        if (!match) {
+          match = allMatches.find(x => x.home === ak && x.away === hk);
+          if (match) swapped = true;
+        }
         if (!match) return;
 
         // ESPN event ID・チームIDを保存（得点者取得に使用）
         match.espnEventId = ev.eventId;
-        match.espnHomeId  = ev.homeId;
-        match.espnAwayId  = ev.awayId;
+        match.espnHomeId  = swapped ? ev.awayId : ev.homeId;
+        match.espnAwayId  = swapped ? ev.homeId : ev.awayId;
 
-        const newHs = (hs  != null) ? hs  : null;
-        const newAs = (as_ != null) ? as_ : null;
+        const newHs = (swapped ? as_ : hs) != null ? Math.round(swapped ? as_ : hs) : null;
+        const newAs = (swapped ? hs : as_) != null ? Math.round(swapped ? hs : as_) : null;
         if (match.hs !== newHs || match.as !== newAs || match.liveStatus !== liveStatus) {
           match.hs = newHs;
           match.as = newAs;
@@ -882,6 +887,7 @@ function processData(data) {
         home:h,away:a,
         hs:m.score1!=null?m.score1:null,
         as:m.score2!=null?m.score2:null,
+        liveStatus:m.score1!=null?'FINISHED':undefined,
       });
     } else if (!isGroup) {
       koNum[phase] = (koNum[phase]||0)+1;
@@ -1046,7 +1052,7 @@ function computeGroupStandings(g) {
   teams.forEach(tk => {
     stats[tk] = {team:tk, played:0, won:0, drawn:0, lost:0, gf:0, ga:0, gd:0, pts:0};
   });
-  groupMatches.filter(m => m.group === g && m.hs !== null && m.liveStatus === 'FINISHED').forEach(m => {
+  groupMatches.filter(m => m.group === g && m.hs !== null && (m.liveStatus === 'FINISHED' || !m.liveStatus)).forEach(m => {
     const h = stats[m.home], a = stats[m.away];
     if (!h || !a) return;
     h.played++; a.played++;
