@@ -843,9 +843,11 @@ async function fetchEspnCoreScores() {
 
         const newHs = (swapped ? as_ : hs) != null ? Math.round(swapped ? as_ : hs) : null;
         const newAs = (swapped ? hs : as_) != null ? Math.round(swapped ? hs : as_) : null;
-        if (match.hs !== newHs || match.as !== newAs || match.liveStatus !== liveStatus) {
-          match.hs = newHs;
-          match.as = newAs;
+        // スコアはESPNが有効な値を返した場合のみ更新（nullでopenfootballの正しいスコアを上書きしない）
+        const scoreChanged = newHs !== null && newAs !== null && (match.hs !== newHs || match.as !== newAs);
+        const statusChanged = match.liveStatus !== liveStatus;
+        if (scoreChanged || statusChanged) {
+          if (scoreChanged) { match.hs = newHs; match.as = newAs; }
           match.liveStatus = liveStatus;
           changed = true;
         }
@@ -1697,10 +1699,13 @@ function resolvePredLabel(label){
   if(posM){
     const pos=parseInt(posM[1])-1;
     const g=posM[2];
-    // 実際の試合結果がある場合は現在のスタンディング順位を優先
-    const standings = computeGroupStandings(g);
-    if (standings.some(s => s.played > 0) && standings[pos]) {
-      return standings[pos].team;
+    // グループ全試合終了時のみ確定順位を使用、進行中は予想を反映
+    const teams = GROUPS[g] || [];
+    const expectedMatches = teams.length * (teams.length - 1) / 2;
+    const finishedCount = groupMatches.filter(m => m.group === g && m.hs !== null && (m.liveStatus === 'FINISHED' || !m.liveStatus)).length;
+    if (expectedMatches > 0 && finishedCount >= expectedMatches) {
+      const standings = computeGroupStandings(g);
+      if (standings[pos]) return standings[pos].team;
     }
     return(PRED.groups[g]||GROUPS[g]||[])[pos]||null;
   }
